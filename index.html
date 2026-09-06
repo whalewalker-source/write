@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Before Noon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;1,7..72,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #eef0eb;
+    --ink: #1c1f1a;
+    --muted: #7b8177;
+    --faint: #c9ccc4;
+    --late: #b23a2e;
+    --met: #3b7a57;
+    --prose: "Literata", Georgia, "Iowan Old Style", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #15171a;
+      --ink: #d9dbd4;
+      --muted: #6c716b;
+      --faint: #2c2f33;
+      --late: #d8574a;
+      --met: #5fa37c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #15171a;
+    --ink: #d9dbd4;
+    --muted: #6c716b;
+    --faint: #2c2f33;
+    --late: #d8574a;
+    --met: #5fa37c;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--prose);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* The page: one column of prose, nothing else. */
+  main {
+    min-height: 100%;
+    display: flex;
+    justify-content: center;
+    padding: 18vh 6vw 30vh;
+  }
+  #page {
+    width: 100%;
+    max-width: 65ch;
+    min-height: 40vh;
+    border: 0;
+    outline: 0;
+    resize: none;
+    background: transparent;
+    color: var(--ink);
+    caret-color: var(--ink);
+    font: 400 20px/1.65 var(--prose);
+    font-optical-sizing: auto;
+    padding: 0;
+    overflow: hidden;
+  }
+  #page::placeholder { color: var(--muted); font-style: italic; opacity: 1; }
+  #page::selection { background: var(--faint); }
+
+  /* Instruments: three corners, one utility face. */
+  .instrument {
+    position: fixed;
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+    user-select: none;
+    z-index: 2;
+  }
+  #kill {
+    top: 20px; left: 24px;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    padding: 4px;
+    font-size: 30px;
+    line-height: 1;
+    cursor: pointer;
+    filter: none;
+    transition: transform 120ms ease;
+  }
+  #kill:hover { transform: scale(1.08); }
+  #kill:focus-visible { outline: 2px solid var(--muted); outline-offset: 4px; border-radius: 6px; }
+  @media (prefers-reduced-motion: reduce) { #kill { transition: none; } }
+
+  #clock {
+    top: 24px; right: 28px;
+    font-size: 30px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-align: right;
+  }
+  #clock.late { color: var(--late); }
+  #clock small,
+  #words small {
+    display: block;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  #words {
+    bottom: 24px; right: 28px;
+    font-size: 30px;
+    font-weight: 500;
+    text-align: right;
+  }
+  #words.met { color: var(--met); }
+  #words.over { color: var(--late); }
+  #words.over small { color: var(--late); }
+
+  @media (max-width: 600px) {
+    #page { font-size: 18px; }
+    #kill, #clock, #words { font-size: 24px; }
+    #clock { top: 22px; right: 20px; }
+    #words { bottom: 20px; right: 20px; }
+    #kill { left: 16px; top: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<button id="kill" class="instrument" type="button" aria-label="Rule one: kill one precious idea. Click to mark it dead, click again to confirm." title="Alive"></button>
+
+<div id="clock" class="instrument" aria-live="off">
+  <span id="clock-time">--:--</span>
+  <small>to 11:59</small>
+</div>
+
+<main>
+  <textarea id="page" spellcheck="true" autocapitalize="sentences" placeholder="Kill something you love. Do it before noon."></textarea>
+</main>
+
+<div id="words" class="instrument" aria-live="off">
+  <span id="words-num">600</span>
+  <small id="words-sub">to go</small>
+</div>
+
+<script>
+(() => {
+  const FLOOR = 600;
+  const CEILING = 1000;
+  const DEADLINE = { h: 11, m: 59 };
+  const ANIMALS = ['🐇','🦊','🐢','🦉','🐙','🦌','🐝','🐋','🦔','🐈','🦜','🐸','🦎','🐑','🦆','🐌'];
+  const STATES = [
+    { glyph: null, title: 'Alive' },      // glyph is the day's animal
+    { glyph: '🚫', title: 'Killed' },
+    { glyph: '✅', title: 'Done' },
+  ];
+
+  const page = document.getElementById('page');
+  const kill = document.getElementById('kill');
+  const clock = document.getElementById('clock');
+  const clockTime = document.getElementById('clock-time');
+  const words = document.getElementById('words');
+  const wordsNum = document.getElementById('words-num');
+  const wordsSub = document.getElementById('words-sub');
+
+  const pad = n => String(n).padStart(2, '0');
+  const dayKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  let today = dayKey();
+  let killState = 0;
+
+  function animalFor(key) {
+    let h = 0;
+    for (const c of key) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    return ANIMALS[h % ANIMALS.length];
+  }
+
+  // Rule 1 - the toggle in the upper left.
+  function renderKill() {
+    const s = STATES[killState];
+    kill.textContent = s.glyph ?? animalFor(today);
+    kill.title = s.title;
+  }
+  kill.addEventListener('click', () => {
+    killState = (killState + 1) % STATES.length;
+    store.set(`kill:${today}`, String(killState));
+    renderKill();
+    page.focus();
+  });
+
+  // Rule 2 - the countdown in the upper right.
+  function renderClock(now) {
+    const target = new Date(now);
+    target.setHours(DEADLINE.h, DEADLINE.m, 0, 0);
+    const msLeft = target - now;
+    if (msLeft <= 0) {
+      clockTime.textContent = '00:00';
+      clock.classList.add('late');
+      return;
+    }
+    clock.classList.remove('late');
+    const minutes = Math.ceil(msLeft / 60000);
+    clockTime.textContent = `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+  }
+
+  // Rule 3 - the word countdown in the lower right.
+  function countWords(text) {
+    const t = text.trim();
+    return t ? t.split(/\s+/).length : 0;
+  }
+  function renderWords() {
+    const n = countWords(page.value);
+    words.classList.remove('met', 'over');
+    if (n < FLOOR) {
+      wordsNum.textContent = String(FLOOR - n);
+      wordsSub.textContent = 'to go';
+    } else if (n <= CEILING) {
+      wordsNum.textContent = '0';
+      wordsSub.textContent = `${n} of ${CEILING}`;
+      words.classList.add('met');
+    } else {
+      wordsNum.textContent = `−${n - CEILING}`;
+      wordsSub.textContent = `${n} over ${CEILING}`;
+      words.classList.add('over');
+    }
+  }
+
+  // The page itself, saved per day so each morning starts blank.
+  function fit() {
+    page.style.height = 'auto';
+    page.style.height = page.scrollHeight + 'px';
+  }
+  function loadDay() {
+    today = dayKey();
+    page.value = store.get(`write:${today}`) ?? '';
+    killState = Number(store.get(`kill:${today}`) ?? 0) % STATES.length;
+    renderKill();
+    renderWords();
+    fit();
+  }
+  page.addEventListener('input', () => {
+    store.set(`write:${today}`, page.value);
+    renderWords();
+    fit();
+  });
+
+  // Cmd/Ctrl+S saves today's page as a text file (works when opened locally).
+  window.addEventListener('keydown', e => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      const blob = new Blob([page.value], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `${today}.txt`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+  });
+
+  function tick() {
+    const now = new Date();
+    if (dayKey(now) !== today) loadDay();
+    renderClock(now);
+  }
+
+  loadDay();
+  tick();
+  setInterval(tick, 1000);
+  window.addEventListener('resize', fit);
+  page.focus();
+})();
+</script>
+</body>
+</html>
