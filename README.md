@@ -8,6 +8,9 @@ A distraction-free writing page built around three rules:
 
 One file, no install, no dependencies. `index.html` is the whole app.
 
+Also in this repo: `mneme/`, a Zepp OS flashcard app for the Amazfit Active 2
+(Ancient Greek vocabulary and other memory work). See `mneme/README.md`.
+
 ## Run it on a Mac
 
 Fastest: double-click `index.html`. It opens in your browser. Press
