@@ -20,12 +20,13 @@ function readSettings() {
     reverse: String(item('reverse', 'false')) === 'true',
     newPerDay: toInt(item('newPerDay', 15), 15),
     brightSeconds: toInt(item('brightSeconds', 45), 45),
+    floor: toInt(item('floor', 52), 52),
     resetProgress: String(item('resetProgress', 'false')) === 'true'
   }
 }
 
 function studySettings(s) {
-  return { reverse: s.reverse, newPerDay: s.newPerDay, brightSeconds: s.brightSeconds }
+  return { reverse: s.reverse, newPerDay: s.newPerDay, brightSeconds: s.brightSeconds, floor: s.floor }
 }
 
 function splitUrls(text) {

@@ -1,5 +1,16 @@
-// Review session for one deck: show front, reveal, grade, repeat.
-import { createWidget, widget, align, text_style, prop, showToast } from '@zos/ui'
+// Recall: prompt fills the primary field; the band is latent until you
+// measure it. Then the answer fills the band and you grade. No labels.
+//
+//   upper button click / tap the field   ADVANCE  reveal, then Good
+//   lower button click / tap the band    REJECT   reveal, then Again
+//   upper button hold  / swipe up        PROMOTE  Easy (after reveal)
+//   lower button hold  / swipe down      DEMOTE   Hard (after reveal)
+//   swipe left                           MORE     note replaces the answer
+//   swipe right                          LEAVE    back (system)
+//
+// Done: reviewed count fills the field, cards to relearn fill the band.
+//   ADVANCE learns ten more new cards if any remain, otherwise leaves.
+//   REJECT leaves.
 import { back } from '@zos/router'
 import { setScrollLock } from '@zos/page'
 import {
@@ -8,64 +19,34 @@ import {
   pauseDropWristScreenOff,
   resetDropWristScreenOff
 } from '@zos/display'
+import {
+  onKey,
+  offKey,
+  onGesture,
+  offGesture,
+  KEY_HOME,
+  KEY_SHORTCUT,
+  KEY_EVENT_CLICK,
+  KEY_EVENT_LONG_PRESS,
+  GESTURE_UP,
+  GESTURE_DOWN,
+  GESTURE_LEFT
+} from '@zos/interaction'
 import { log as Logger } from '@zos/utils'
 import { BasePage } from '@zeppos/zml/base-page'
-import { W, CX, s, COLORS, FONT, sizeFor } from '../utils/layout'
+import { COLORS } from '../utils/layout'
+import { createStage } from '../utils/stage'
 import { loadDeck } from '../utils/decks'
 import { loadProgress, saveProgress, loadSettings } from '../utils/store'
 import { GRADE, STATE, dayIndex, newCard, schedule, buildQueue, requeue } from '../utils/scheduler'
 
 const logger = Logger.getLogger('mneme-review')
 const EXTRA_NEW = 10
-
-// Card face boxes (466 design). The front sits large and centred until the
-// answer is revealed, then moves up to make room for the back and the note.
-const FRONT_BIG = { x: 48, y: 64, w: 466 - 96, h: 236 }
-const FRONT_TOP = { x: 48, y: 56, w: 466 - 96, h: 92 }
-const BACK_BOX = { x: 44, y: 150, w: 466 - 88, h: 106 }
-const NOTE_BOX = { x: 40, y: 256, w: 466 - 80, h: 50 }
-
-function box(b) {
-  return { x: s(b.x), y: s(b.y), w: s(b.w), h: s(b.h) }
-}
-
-function show(w, visible) {
-  if (w) w.setProperty(prop.VISIBLE, !!visible)
-}
-
-function textWidget(b, size, color, extra) {
-  return createWidget(
-    widget.TEXT,
-    Object.assign(
-      box(b),
-      {
-        color,
-        text_size: size,
-        align_h: align.CENTER_H,
-        align_v: align.CENTER_V,
-        text_style: text_style.WRAP,
-        text: ''
-      },
-      extra || {}
-    )
-  )
-}
-
-function button(x, y, w, h, label, color, size, onClick) {
-  return createWidget(widget.BUTTON, {
-    x: s(x),
-    y: s(y),
-    w: s(w),
-    h: s(h),
-    radius: s(Math.min(h, 56) / 2),
-    normal_color: color,
-    press_color: color,
-    text: label,
-    text_size: s(size),
-    color: COLORS.text,
-    click_func: onClick
-  })
-}
+const GRADE_COLOR = {}
+GRADE_COLOR[GRADE.AGAIN] = COLORS.again
+GRADE_COLOR[GRADE.HARD] = COLORS.hard
+GRADE_COLOR[GRADE.GOOD] = COLORS.good
+GRADE_COLOR[GRADE.EASY] = COLORS.easy
 
 Page(
   BasePage({
@@ -78,10 +59,12 @@ Page(
       queue: [],
       current: null,
       revealed: false,
+      showingNote: false,
       reviewed: 0,
       again: 0,
-      error: '',
-      ui: {}
+      done: false,
+      stage: null,
+      error: false
     },
 
     onInit(params) {
@@ -93,7 +76,7 @@ Page(
       }
       const deck = deckId ? loadDeck(deckId) : null
       if (!deck || !deck.cards || !deck.cards.length) {
-        this.state.error = 'Deck not found'
+        this.state.error = true
         return
       }
       const byId = {}
@@ -105,6 +88,7 @@ Page(
       if (progress.day !== today) {
         progress.day = today
         progress.newDone = 0
+        progress.reviewedToday = 0
       }
       const built = buildQueue(deck.cards, progress.cards, today, settings.newPerDay - progress.newDone)
 
@@ -118,17 +102,51 @@ Page(
 
     build() {
       if (this.state.error) {
-        textWidget({ x: 63, y: 150, w: 340, h: 120 }, s(28), COLORS.text).setProperty(
-          prop.TEXT,
-          this.state.error
-        )
-        button(133, 300, 200, 56, 'Back', COLORS.button, 24, () => back())
+        back()
         return
       }
       setScrollLock({ lock: true })
       setPageBrightTime({ brightTime: this.state.settings.brightSeconds * 1000 })
       pauseDropWristScreenOff({ duration: 600000 })
-      this.createWidgets()
+
+      this.state.stage = createStage({
+        floor: this.state.settings.floor,
+        onTapTop: () => this.advance(),
+        onTapBottom: () => this.reject()
+      })
+
+      onKey({
+        callback: (key, event) => {
+          if (key !== KEY_HOME && key !== KEY_SHORTCUT) return false
+          if (event === KEY_EVENT_CLICK) {
+            if (key === KEY_HOME) this.advance()
+            else this.reject()
+          } else if (event === KEY_EVENT_LONG_PRESS) {
+            if (key === KEY_HOME) this.promote()
+            else this.demote()
+          }
+          return true
+        }
+      })
+      onGesture({
+        callback: (event) => {
+          if (event === GESTURE_UP) {
+            this.promote()
+            return true
+          }
+          if (event === GESTURE_DOWN) {
+            this.demote()
+            return true
+          }
+          if (event === GESTURE_LEFT) {
+            this.more()
+            return true
+          }
+          return false
+        }
+      })
+
+      this.state.stage.setLatent(true)
       this.next()
     },
 
@@ -139,54 +157,70 @@ Page(
         logger.log('save on exit failed', e)
       }
       try {
+        offKey()
+        offGesture()
         resetPageBrightTime()
         resetDropWristScreenOff()
         setScrollLock({ lock: false })
       } catch (e) {
-        // display helpers are best effort
+        // best effort
       }
-    },
-
-    createWidgets() {
-      const ui = this.state.ui
-      ui.counter = textWidget({ x: 103, y: 20, w: 260, h: 32 }, s(20), COLORS.muted)
-      ui.front = textWidget(FRONT_BIG, s(40), COLORS.text, { font: FONT })
-      ui.back = textWidget(BACK_BOX, s(28), COLORS.soft, { font: FONT })
-      ui.note = textWidget(NOTE_BOX, s(20), COLORS.muted, { font: FONT })
-
-      ui.show = button(118, 330, 230, 64, 'Show answer', COLORS.button, 24, () => this.reveal())
-
-      ui.again = button(40, 312, 124, 50, 'Again', COLORS.again, 22, () => this.grade(GRADE.AGAIN))
-      ui.hard = button(171, 312, 124, 50, 'Hard', COLORS.hard, 22, () => this.grade(GRADE.HARD))
-      ui.easy = button(302, 312, 124, 50, 'Easy', COLORS.easy, 22, () => this.grade(GRADE.EASY))
-      ui.good = button(104, 370, 258, 56, 'Good', COLORS.good, 26, () => this.grade(GRADE.GOOD))
-
-      ui.done = textWidget({ x: 63, y: 90, w: 340, h: 160 }, s(28), COLORS.text)
-      ui.more = button(118, 262, 230, 60, 'Learn ' + EXTRA_NEW + ' more', COLORS.accent, 24, () =>
-        this.learnMore()
-      )
-      ui.exit = button(133, 334, 200, 56, 'Back to decks', COLORS.button, 22, () => back())
-    },
-
-    setGradeButtons(visible) {
-      const ui = this.state.ui
-      show(ui.again, visible)
-      show(ui.hard, visible)
-      show(ui.easy, visible)
-      show(ui.good, visible)
-    },
-
-    setDoneUi(visible) {
-      const ui = this.state.ui
-      show(ui.done, visible)
-      show(ui.exit, visible)
-      if (!visible) show(ui.more, false)
+      if (this.state.stage) this.state.stage.destroy()
     },
 
     faces(card) {
       const reverse = this.state.settings.reverse
       return { front: reverse ? card.b : card.f, back: reverse ? card.f : card.b, note: card.n || '' }
     },
+
+    updateRing() {
+      const st = this.state
+      const total = st.reviewed + st.queue.length
+      st.stage.setRing(total ? st.reviewed / total : 1)
+    },
+
+    // ---- verbs ----
+
+    advance() {
+      const st = this.state
+      if (st.done) {
+        this.learnMore()
+        return
+      }
+      if (!st.revealed) this.reveal()
+      else this.grade(GRADE.GOOD)
+    },
+
+    reject() {
+      const st = this.state
+      if (st.done) {
+        back()
+        return
+      }
+      if (!st.revealed) this.reveal()
+      else this.grade(GRADE.AGAIN)
+    },
+
+    promote() {
+      if (this.state.revealed && !this.state.done) this.grade(GRADE.EASY)
+    },
+
+    demote() {
+      if (this.state.revealed && !this.state.done) this.grade(GRADE.HARD)
+    },
+
+    // The note swaps into the band in place of the answer, and back.
+    more() {
+      const st = this.state
+      if (!st.revealed || st.done || !st.current) return
+      const f = this.faces(st.byId[st.current])
+      if (!f.note) return
+      st.showingNote = !st.showingNote
+      st.stage.setSecondary(st.showingNote ? f.note : f.back)
+      st.stage.haptic('light')
+    },
+
+    // ---- flow ----
 
     next() {
       const st = this.state
@@ -196,6 +230,7 @@ Page(
       }
       st.current = st.queue[0]
       st.revealed = false
+      st.showingNote = false
       const card = st.byId[st.current]
       if (!card) {
         st.queue.shift()
@@ -203,38 +238,17 @@ Page(
         return
       }
       const f = this.faces(card)
-      const ui = st.ui
-      ui.front.setProperty(prop.MORE, Object.assign(box(FRONT_BIG), { text_size: sizeFor(f.front, true), text: f.front }))
-      ui.counter.setProperty(
-        prop.TEXT,
-        st.queue.length + ' left' + (st.again ? ' · ' + st.again + ' again' : '')
-      )
-      this.setDoneUi(false)
-      this.setGradeButtons(false)
-      show(ui.back, false)
-      show(ui.note, false)
-      show(ui.counter, true)
-      show(ui.front, true)
-      show(ui.show, true)
+      st.stage.setPrimary(f.front)
+      st.stage.setSecondary('')
+      this.updateRing()
     },
 
     reveal() {
       const st = this.state
       if (st.revealed || !st.current) return
-      const card = st.byId[st.current]
-      const f = this.faces(card)
-      const ui = st.ui
-      ui.front.setProperty(prop.MORE, Object.assign(box(FRONT_TOP), { text_size: sizeFor(f.front, false), text: f.front }))
-      ui.back.setProperty(prop.MORE, Object.assign(box(BACK_BOX), { text_size: sizeFor(f.back, false), text: f.back }))
-      show(ui.back, true)
-      if (f.note) {
-        ui.note.setProperty(prop.TEXT, f.note)
-        show(ui.note, true)
-      } else {
-        show(ui.note, false)
-      }
-      show(ui.show, false)
-      this.setGradeButtons(true)
+      const f = this.faces(st.byId[st.current])
+      st.stage.setSecondary(f.back)
+      st.stage.setLatent(false)
       st.revealed = true
     },
 
@@ -247,6 +261,7 @@ Page(
       const result = schedule(before, g, st.today)
       st.progress.cards[id] = result.card
       if (wasNew) st.progress.newDone += 1
+      st.progress.reviewedToday += 1
       st.reviewed += 1
       if (g === GRADE.AGAIN) st.again += 1
       st.queue.shift()
@@ -256,41 +271,35 @@ Page(
       } catch (e) {
         logger.log('save failed', e)
       }
+      st.stage.haptic(g === GRADE.AGAIN || g === GRADE.HARD ? 'strong' : 'light')
+      st.stage.flash(GRADE_COLOR[g], () => st.stage.setLatent(st.done && st.again > 0 ? false : true))
       this.next()
     },
 
     finish() {
       const st = this.state
-      const ui = st.ui
       st.current = null
       st.revealed = false
-      show(ui.counter, false)
-      show(ui.front, false)
-      show(ui.back, false)
-      show(ui.note, false)
-      show(ui.show, false)
-      this.setGradeButtons(false)
-
-      let text
-      if (st.reviewed) {
-        text = 'Done for today\n' + st.reviewed + ' reviewed' + (st.again ? ', ' + st.again + ' again' : '')
-      } else {
-        text = 'Nothing due today'
-      }
-      ui.done.setProperty(prop.TEXT, text)
-      const freshLeft = buildQueue(st.deck.cards, st.progress.cards, st.today, EXTRA_NEW).counts.freshTotal
-      this.setDoneUi(true)
-      show(ui.more, freshLeft > 0)
+      st.showingNote = false
+      st.done = true
+      st.stage.setPrimary(String(st.reviewed))
+      st.stage.setSecondary(st.again > 0 ? String(st.again) : '')
+      st.stage.setRingColor(COLORS.good)
+      st.stage.setRing(1)
+      st.stage.haptic('middle')
     },
 
     learnMore() {
       const st = this.state
       const built = buildQueue(st.deck.cards, st.progress.cards, st.today, EXTRA_NEW)
       if (!built.queue.length) {
-        showToast({ text: 'No new cards left' })
+        back()
         return
       }
       st.queue = built.queue
+      st.done = false
+      st.stage.setRingColor(COLORS.ring)
+      st.stage.setLatent(true)
       this.next()
     }
   })

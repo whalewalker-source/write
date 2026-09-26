@@ -57,7 +57,15 @@ AppSettingsPage({
         value: get('brightSeconds', '45'),
         onChange: (v) => set('brightSeconds', clampInt(v, 10, 600, 45))
       }),
-      help('Study options reach the watch on the next sync, or at once while Mneme is open.'),
+      TextInput({
+        label: 'Smallest comfortable text (px)',
+        value: get('floor', '52'),
+        onChange: (v) => set('floor', clampInt(v, 32, 120, 52))
+      }),
+      help(
+        'Text fills its field; this is the size it will not shrink below. ' +
+          'Study options reach the watch on the next sync, or at once while Mneme is open.'
+      ),
 
       heading('Danger zone'),
       Button({

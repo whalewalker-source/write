@@ -16,6 +16,10 @@ for (const deck of DECKS) {
       ids.add(c.id)
       assert.ok(c.f && c.f.trim(), `empty front on ${c.id}`)
       assert.ok(c.b && c.b.trim(), `empty back on ${c.id}`)
+      // DESIGN.md content rule: fronts fill the upper half at the 52 px floor
+      // up to 24 characters, backs fill the band up to 20
+      assert.ok(c.f.length <= 24, `front too long on ${c.id}: ${c.f.length} chars`)
+      assert.ok(c.b.length <= 20, `back too long on ${c.id}: ${c.b.length} chars`)
       for (const s of [c.f, c.b, c.n || '']) {
         // the watch font has no shaping engine, so text must be precomposed
         assert.equal(s.normalize('NFC'), s, `not NFC on ${c.id}: ${s}`)

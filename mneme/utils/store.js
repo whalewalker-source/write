@@ -31,7 +31,7 @@ export function safeName(id) {
 
 // ---- settings (mirrored from the phone settings page on every sync) ----
 
-export const DEFAULT_SETTINGS = { reverse: false, newPerDay: 15, brightSeconds: 45 }
+export const DEFAULT_SETTINGS = { reverse: false, newPerDay: 15, brightSeconds: 45, floor: 52 }
 const SETTINGS_FILE = 'settings.json'
 
 export function loadSettings() {
@@ -39,7 +39,8 @@ export function loadSettings() {
   return {
     reverse: !!saved.reverse,
     newPerDay: clampInt(saved.newPerDay, 0, 500, DEFAULT_SETTINGS.newPerDay),
-    brightSeconds: clampInt(saved.brightSeconds, 10, 600, DEFAULT_SETTINGS.brightSeconds)
+    brightSeconds: clampInt(saved.brightSeconds, 10, 600, DEFAULT_SETTINGS.brightSeconds),
+    floor: clampInt(saved.floor, 32, 120, DEFAULT_SETTINGS.floor)
   }
 }
 
@@ -48,7 +49,8 @@ export function saveSettings(next) {
   const merged = {
     reverse: next.reverse === undefined ? cur.reverse : !!next.reverse,
     newPerDay: clampInt(next.newPerDay, 0, 500, cur.newPerDay),
-    brightSeconds: clampInt(next.brightSeconds, 10, 600, cur.brightSeconds)
+    brightSeconds: clampInt(next.brightSeconds, 10, 600, cur.brightSeconds),
+    floor: clampInt(next.floor, 32, 120, cur.floor)
   }
   writeJson(SETTINGS_FILE, merged)
   return merged
@@ -61,8 +63,8 @@ export function clampInt(v, lo, hi, fallback) {
 }
 
 // ---- per-deck progress ----
-// In memory: { day, newDone, cards: { cardId: {s,i,e,d,r,l} } }
-// On disk:   { v: 1, day, newDone, cards: { cardId: [s,i,e,d,r,l] } }
+// In memory: { day, newDone, reviewedToday, cards: { cardId: {s,i,e,d,r,l} } }
+// On disk:   { v: 1, day, newDone, rt, cards: { cardId: [s,i,e,d,r,l] } }
 
 export function progressPath(deckId) {
   return 'progress_' + safeName(deckId) + '.json'
@@ -70,10 +72,11 @@ export function progressPath(deckId) {
 
 export function loadProgress(deckId) {
   const raw = readJson(progressPath(deckId), null)
-  const out = { day: 0, newDone: 0, cards: {} }
+  const out = { day: 0, newDone: 0, reviewedToday: 0, cards: {} }
   if (!raw || typeof raw !== 'object') return out
   out.day = raw.day | 0
   out.newDone = raw.newDone | 0
+  out.reviewedToday = raw.rt | 0
   const cards = raw.cards || {}
   for (const id in cards) out.cards[id] = unpack(cards[id])
   return out
@@ -82,7 +85,13 @@ export function loadProgress(deckId) {
 export function saveProgress(deckId, progress) {
   const cards = {}
   for (const id in progress.cards) cards[id] = pack(progress.cards[id])
-  writeJson(progressPath(deckId), { v: 1, day: progress.day, newDone: progress.newDone, cards })
+  writeJson(progressPath(deckId), {
+    v: 1,
+    day: progress.day,
+    newDone: progress.newDone,
+    rt: progress.reviewedToday | 0,
+    cards
+  })
 }
 
 export function resetProgress(deckIds) {

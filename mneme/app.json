@@ -5,8 +5,8 @@
     "appName": "Mneme",
     "appType": "app",
     "version": {
-      "code": 1,
-      "name": "0.1.0"
+      "code": 2,
+      "name": "0.2.0"
     },
     "icon": "icon.png",
     "vender": "calvin",
@@ -25,7 +25,7 @@
     "active2r": {
       "module": {
         "page": {
-          "pages": ["page/home", "page/review", "page/probe"]
+          "pages": ["page/home", "page/review"]
         },
         "app-side": {
           "path": "app-side/index"

@@ -80,7 +80,25 @@ def meta_column(meta, name):
     return int(v) if v and v.isdigit() else None
 
 
-def convert(text, front=1, back=2, note=3, deck_id=None, deck_name=None, fallback_name="deck"):
+def first_meaning(back, note):
+    """Keep the first meaning on the back; move the rest to the front of the note."""
+    parts = re.split(r"[;,]", back, 1)
+    if len(parts) == 2 and parts[0].strip() and parts[1].strip():
+        rest = parts[1].strip()
+        return parts[0].strip(), (rest + " · " + note) if note else rest
+    return back, note
+
+
+def convert(
+    text,
+    front=1,
+    back=2,
+    note=3,
+    deck_id=None,
+    deck_name=None,
+    fallback_name="deck",
+    split_back=False,
+):
     rows, meta = parse_export(text)
     is_html = meta.get("html", "false").lower() == "true"
     guid_col = meta_column(meta, "guid column")
@@ -101,6 +119,8 @@ def convert(text, front=1, back=2, note=3, deck_id=None, deck_name=None, fallbac
         f, b, n = field(front), field(back), field(note)
         if not f or not b:
             continue
+        if split_back:
+            b, n = first_meaning(b, n)
         guid = row[guid_col - 1].strip() if guid_col and len(row) >= guid_col else ""
         cid = guid or hashlib.sha1(f.encode("utf-8")).hexdigest()[:10]
         if cid in seen:
@@ -134,6 +154,11 @@ def selftest():
     d2 = convert(plain, note=0, deck_name="Plain")
     assert d2["cards"][0]["f"] == "λόγος" and len(d2["cards"][0]["f"]) == 5
     assert d2["id"] == "plain"
+    # --first-meaning keeps the first sense on the back and moves the rest to the note
+    d3 = convert("λόγος\tword, speech; account\tnoun\n", deck_name="Split", split_back=True)
+    assert d3["cards"][0]["b"] == "word", d3["cards"][0]
+    assert d3["cards"][0]["n"] == "speech; account · noun", d3["cards"][0]
+    assert first_meaning("peace", "") == ("peace", "")
     print("selftest ok")
 
 
@@ -147,6 +172,17 @@ def main(argv=None):
     p.add_argument("--front", type=int, default=1, help="field number for the front (default 1)")
     p.add_argument("--back", type=int, default=2, help="field number for the back (default 2)")
     p.add_argument("--note", type=int, default=3, help="field number for the note, 0 for none (default 3)")
+    p.add_argument(
+        "--first-meaning",
+        action="store_true",
+        help="keep only the first meaning (up to the first comma or semicolon) on the back; move the rest into the note",
+    )
+    p.add_argument(
+        "--max-back",
+        type=int,
+        default=20,
+        help="warn about backs longer than this many characters (default 20, the watch band's comfortable limit)",
+    )
     p.add_argument("--selftest", action="store_true")
     args = p.parse_args(argv)
 
@@ -166,10 +202,19 @@ def main(argv=None):
         deck_id=args.deck_id,
         deck_name=args.deck_name,
         fallback_name=path.stem,
+        split_back=args.first_meaning,
     )
     if not deck["cards"]:
         print("no cards found; check --front/--back", file=sys.stderr)
         return 1
+    long_backs = [c for c in deck["cards"] if len(c["b"]) > args.max_back]
+    if long_backs:
+        sample = "; ".join(c["b"] for c in long_backs[:3])
+        print(
+            f"warning: {len(long_backs)} back(s) longer than {args.max_back} characters will render small "
+            f"on the watch (e.g. {sample}). Consider --first-meaning.",
+            file=sys.stderr,
+        )
 
     payload = json.dumps(deck, ensure_ascii=False, indent=1)
     if args.js:
