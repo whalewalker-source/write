@@ -8,6 +8,10 @@ Status tags: [Certain] hard evidence (device docs, typings, measurement),
 [Likely] strong inference, [Guessing] filling a gap. Untagged rules are
 design decisions, not facts.
 
+Revision 2: overlap doubled to 20 px, fields bleed 20 px past the screen,
+text fills its field by measurement instead of stepping through a fixed
+scale, and every field grows and shrinks about one fixed centre.
+
 ## 1. Premise
 
 **The reader.** Near-sighted, no glasses at the wrist. The watch sits about
@@ -29,8 +33,11 @@ deviceSource 10092803 among eight ids).
 
 **The rule you gave.** One critical piece of information fills the upper two
 thirds. One secondary piece may take the lower third. The large piece sits
-behind the small one. Buttons first, cardinal swipes second. No labels: only
-content is ever on screen.
+behind the small one. The two overlap each other by 20 px and run past the
+edges of the screen by the same 20 px. Content always fills its field: fewer
+characters mean bigger type, more mean smaller, and the block grows and
+shrinks about the fixed centre of its field. Buttons first, cardinal swipes
+second. No labels: only content is ever on screen.
 
 ## 2. The theme
 
@@ -59,45 +66,69 @@ gesture exists. State is carried by three things only: position (upper field
 or lower band), layer (behind or in front), weight (size and colour). If a
 screen needs a word that is not content, the screen is wrong.
 
-## 3. Canvas: a 466 circle split two thirds, one third
+## 3. Canvas: two fields that overlap each other and the screen
 
-All numbers are in design pixels on the 466 face. `s()` in
-`utils/layout.js` rescales them for any other round device.
+All numbers are design pixels on the 466 face; `s()` in `utils/layout.js`
+rescales them for any other round device. Two constants drive everything:
 
-| Row (y) | Chord width | Used for |
+| Constant | Value | Meaning |
 | --- | --- | --- |
-| 56 | 303 | top of a three-line primary |
-| 84 | 358 | top of the primary box |
-| 120 | 408 | |
-| 233 | 466 | widest row |
-| 300 | 446 | top edge of the band |
-| 311 | 439 | two-thirds line |
-| 322 | 435 | top of the secondary box |
-| 400 | 325 | |
-| 418 | 278 | bottom of the secondary box |
-| 440 | 214 | nothing below this |
+| overlap | 20 px | how far the two fields overlap each other |
+| bleed | 20 px | how far each field runs past the visible edge |
+| two-thirds line | y 311 | the split, measured on the visible screen |
 
-**Zones**
+**Fields**
 
-| Zone | Box (x, y, w, h) | Notes |
+| Field | x, y, w, h | Centre | Notes |
+| --- | --- | --- | --- |
+| Primary field (behind) | −20, −20, 506, 341 | (233, 150.5) | bleeds 20 px over the top and both sides; ends 10 px below the split |
+| Band (in front) | −20, 301, 506, 185 | (233, 393.5) | bleeds 20 px over the bottom and both sides; starts 10 px above the split |
+| Overlap zone | y 301 to 321 | | the band covers this strip of the primary field |
+| Ring | r 231, width 3 | | hairline at the very edge, drawn before the text |
+
+The band is a `FILL_RECT` at alpha 200 when resolved, 90 when latent. The
+round mask clips both fields; the parts outside the circle exist only so
+that content can run to and past the edge.
+
+**Where the edge really is.** The screen edge is the circle, not the
+bounding square, so "20 px past the edge" is measured at the circle. For a
+line of text spanning rows y0 to y1, the allowed width is the narrowest
+chord across that span plus twice the bleed, never more than 506:
+
+| Row (y) | Chord | Allowed line width (chord + 40) |
 | --- | --- | --- |
-| Upper field | 0, 0, 466, 311 | the two thirds |
-| Primary box | 53, 84, 360, 226 | text box inside the field, centred on y 197 |
-| Band | 0, 300, 466, 166 | translucent layer, clipped by the round mask |
-| Secondary box | 91, 322, 284, 96 | text box inside the band |
-| Ring | arc radius 227, width 4 | ambient progress, no numerals |
-| Overlap | y 300 to 310 | the band covers the last 10 px of the primary box |
+| 20 | 189 | 229 |
+| 40 | 261 | 301 |
+| 60 | 312 | 352 |
+| 84 | 358 | 398 |
+| 120 | 408 | 448 |
+| 150.5 (primary centre) | 436 | 476 |
+| 233 | 466 | 506 |
+| 301 (band top) | 446 | 486 |
+| 311 (split) | 439 | 479 |
+| 321 (primary bottom) | 431 | 471 |
+| 350 | 403 | 443 |
+| 393.5 (band centre) | 338 | 378 |
+| 420 | 278 | 318 |
+| 440 | 214 | 254 |
+| 460 | 105 | 145 |
 
-The overlap is deliberate. It is the visible superposition: a two-line
-prompt's descenders dip under the band's edge and dim. Ten pixels is enough
-to show the layering and too little to cost legibility.
+**One anchor per field.** Each text widget's box is the whole field, with
+horizontal and vertical centring. Only `text_size` changes. The block
+therefore always grows and shrinks about the field centre: (233, 150.5) for
+the primary, (233, 393.5) for the band. Nothing else on the screen moves.
+
+The primary centre sits 82 px above the display centre. A two-thirds split
+and a central anchor pull against each other; the split won. A 3/5 split
+would put the anchor at y 170, a half split at 233 with a band half the
+screen. Say the word and the tables regenerate.
 
 Two physical anchors make the split feel native to the hardware [Likely]:
-the upper button sits level with the upper field, the lower button sits
-level with the band. Upper button acts on the top layer's content; lower
-button acts on the bottom layer's content. Never cross them.
+the upper button sits level with the primary field, the lower button level
+with the band. Upper button acts on the top layer's content; lower button
+acts on the bottom layer's content. Never cross them.
 
-## 4. Type
+## 4. Type: measured to fill
 
 **Face.** Noto Sans, the Zepp OS system face [Certain, Zepp font doc].
 Mneme bundles a 128 KB subset with Latin, Greek and Greek Extended so
@@ -105,45 +136,92 @@ breathings, iota subscripts and circumflexes exist as precomposed glyphs.
 [Certain] The watch does no shaping: every string must be Unicode NFC. The
 Anki converter and the deck tests enforce this.
 
-**Weight.** Regular today. If blur is still a problem after the calibration
-below, add a Noto Sans Medium subset for the primary layer only. Medium holds
-its counters under blur; Bold closes them. Never Light.
+**Weight.** Regular today. If blur is still a problem after calibration,
+add a Noto Sans Medium subset for the primary layer only. Medium holds its
+counters under blur; Bold closes them. Never Light.
 
-**Scale.** Sizes are Zepp `text_size` values (em box in pixels). Angular
-sizes assume 35 cm viewing distance; Snellen equivalents assume a 20/20
-letter is 5 arcminutes tall.
+**The fill rule.** There is no fixed scale. For every piece of content the
+watch finds the largest size at which the text, wrapped inside its field,
+obeys four limits, and uses it. [Certain] `getTextLayout(text, { text_size,
+text_width, wrapped: 1, rows_max })` from `@zos/ui` returns width, height,
+row count and whether it had to truncate, without drawing anything.
 
-| Step | Size | Cap height | At 35 cm | About | Fits (Greek, 360 px box) |
-| --- | --- | --- | --- | --- | --- |
-| P1 | 96 | 4.9 mm | 48′ | 20/190 | 6 characters, 1 line |
-| P2 | 80 | 4.1 mm | 40′ | 20/160 | 8 characters, 1 line |
-| P3 | 64 | 3.3 mm | 32′ | 20/130 | 10 per line, 2 lines |
-| P4 | 52 | 2.7 mm | 26′ | 20/105 | 12 per line, 3 lines |
-| P5 | 44 | 2.3 mm | 22′ | 20/90 | 15 per line, 3 lines |
-| S1 | 44 | 2.3 mm | 22′ | 20/90 | 11 per line, 2 lines (284 px box) |
-| S2 | 36 | 1.9 mm | 18′ | 20/73 | 14 per line, 2 lines |
-| S3 | 32 | 1.6 mm | 16′ | 20/65 | 16 per line, 2 lines |
+```
+fit(text, field):
+  lo = 32, hi = 300
+  while lo <= hi:
+    size = midpoint
+    lay  = getTextLayout(text, { text_size: size, text_width: field.w,
+                                 wrapped: 1, rows_max: field.maxRows })
+    ok   = lay.result === 0                      # nothing truncated
+        && lay.height <= field.h                 # block fits the field
+        && every row's width <= narrowest chord across that row + 2 * bleed
+    if ok: best = size, lo = size + 1  else hi = size - 1
+  return best                                    # 32 if nothing fits: content too long
+```
 
-Rules:
+Row geometry for the chord test: block top = field centre − height / 2, row
+height = height / rows, row i spans [top + i·rowH, top + (i + 1)·rowH].
+`getTextLayout` reports one width for the block, so the widest row is
+tested against every row's chord, which is conservative near the top of the
+primary field and the bottom of the band. That is the safe side.
 
-- The primary picks the largest step whose wrapped result is at most three
-  lines with no line overflowing. The secondary does the same with two
-  lines. Shrink, never scroll, never ellipsis.
-- Floor: 32 px anywhere on screen. If content does not fit at the floor, the
-  content is too long. Fix the deck, not the layout.
-- Line height 116% of the size, Zepp's own figure for Greek and Latin
-  [Certain, font doc]. In Zepp terms: `line_space = round(0.16 * text_size)`.
-- Polytonic capitals carry marks above the cap line. Give every text box
-  `h >= lines * 1.35 * text_size` so nothing clips.
-- Letter spacing 0. No condensed faces. No italics.
+Limits: primary up to 3 rows, band up to 2 rows, floor 32 px everywhere,
+wrapping only at spaces (a single long word is one row and simply gets
+smaller). Shrink, never scroll, never ellipsis.
+
+**What the rule yields.** Average Noto Sans advance about 0.56 em for Greek
+and Latin, row height 1.16 em (Zepp's own figure for these scripts
+[Certain, font doc]). Indicative; the watch measures the real string.
+
+| Characters | Primary field | Band |
+| --- | --- | --- |
+| 1 | 250 px, 1 row | 124 px |
+| 2 | 218 px | 117 px |
+| 3 | 184 px | 106 px |
+| 5 | 134 px | 85 px |
+| 8 | 109 px, 2 rows (one word: about 92 on 1 row) | 64 px |
+| 10 | 100 px, 2 rows | 56 px, 2 rows |
+| 12 | 92 px, 2 rows | 53 px, 2 rows |
+| 15 | 78 px, 2 rows | |
+| 20 | 70 px, 2 rows | 42 px, 2 rows |
+| 25 | 61 px, 3 rows | 38 px at 24 |
+| 28 | | 35 px, 2 rows |
+| 32 | 56 px, 3 rows | 32 px, the floor |
+| 44 | 44 px, 3 rows | too long |
+
+The legibility ladder (96, 80, 64, 52, 44, 36, 32) stays as a calibration
+instrument in the companion page: it is what you read at wrist distance to
+find your floor. It is no longer a layout rule.
+
+| Size | Cap height | At 35 cm | About |
+| --- | --- | --- | --- |
+| 96 | 4.9 mm | 48′ | 20/190 |
+| 80 | 4.1 mm | 40′ | 20/160 |
+| 64 | 3.3 mm | 32′ | 20/130 |
+| 52 | 2.7 mm | 26′ | 20/105 |
+| 44 | 2.3 mm | 22′ | 20/90 |
+| 36 | 1.9 mm | 18′ | 20/73 |
+| 32 | 1.6 mm | 16′ | 20/65 |
+
+Other rules:
+
+- Row spacing: `line_space = round(0.16 * text_size)`. Give the widget the
+  whole field as its box; the fit already keeps the block inside it.
+- Polytonic capitals carry marks above the cap line; the 1.16 row height
+  covers them. Letter spacing 0. No condensed faces. No italics.
 - Numbers are content, not labels: a bare number in the band is allowed
   (cards due), a number with a word is not.
+- Bleed clips glyphs. At the widest row a first or last letter can lose up
+  to 20 px, which on a 96 px glyph is about a fifth of its width. That is
+  the look you asked for; if a clipped breathing ever costs you a reading,
+  drop the bleed to 10 and keep the overlap at 20.
 
-**Content rule that follows from the type rule.** A card back must be
-readable at S2 or larger: 28 characters or fewer. Keep the first meaning on
-the back; move the rest into the note. Verb principal parts live in the note
-and are shown only on request. The starter deck violates this in places and
-should be trimmed to match.
+**Content rule that follows.** A card back of 20 characters or fewer reads
+at 42 px or more; 32 characters is the hard ceiling before the floor is
+hit. Keep the first meaning on the back; move the rest into the note. Verb
+principal parts live in the note and are shown only on request. The
+starter deck violates this in places and will be trimmed to match.
 
 ## 5. Colour
 
@@ -175,15 +253,21 @@ position or a haptic.
 
 | Layer | Content | Behaviour |
 | --- | --- | --- |
-| 0 ground | black | never changes |
-| 1 base, behind | primary content in the primary box | arrives first; may shrink one step if the band appears and lines collide (they do not by construction) |
-| 2 front | band plus secondary content in the secondary box | latent (alpha 90, empty) until measured, then alpha 200 with content |
+| 0 ground | black, plus the 3 px ring at r 231 | never changes except the ring's arc |
+| 1 base, behind | primary content filling the primary field | arrives first; refits when the band appears only if the content has to change |
+| 2 front | band plus secondary content filling the band | latent (alpha 90, empty) until measured, then alpha 200 with content |
 | 3 transient | feedback only: band colour flash, ring advance | at most 250 ms, never text |
 
-Revealing means layer 2 appearing over layer 1. Content never migrates
-between layers to change meaning. The note, when asked for, swaps into
-layer 2 in place of the answer; the screen still holds exactly two pieces
-of information.
+The band overlaps the last 20 px of the primary field. When the primary
+runs to three rows, its last row's descenders dip under the band's edge and
+dim: that strip is the visible superposition. Revealing means layer 2
+appearing over layer 1. Content never migrates between layers to change
+meaning. The note, when asked for, swaps into layer 2 in place of the
+answer; the screen still holds exactly two pieces of information.
+
+The ring is the one element that competes with bleeding glyphs. It is drawn
+first, so text passes over it. If it reads as noise on the watch, remove it;
+nothing else in the guide depends on it.
 
 ## 7. Inputs
 
@@ -203,7 +287,7 @@ so the grammar survives either answer.
 
 | Verb | Means | Tier 1: buttons (if the probe says yes) | Tier 2: swipes | Tier 3: tap zones |
 | --- | --- | --- | --- | --- |
-| ADVANCE | reveal; when revealed, accept (Good) | upper button click | | tap the upper field |
+| ADVANCE | reveal; when revealed, accept (Good) | upper button click | | tap the primary field |
 | REJECT | Again | lower button click | | tap the band |
 | PROMOTE | Easy | | swipe up, after reveal | |
 | DEMOTE | Hard | | swipe down, after reveal | |
@@ -211,17 +295,18 @@ so the grammar survives either answer.
 | LEAVE | back | | swipe right (system default, kept) | |
 
 Deck list uses the same bindings: ADVANCE opens the shown deck, REJECT steps
-to the next deck (the list is a cycle, one deck on screen at a time, name in
-the primary box, due count as a bare number in the band), swipe left syncs.
+to the next deck (the list is a cycle, one deck on screen at a time, name
+filling the primary field, due count as a bare number filling the band),
+swipe left syncs.
 
 If taps are not interceptable but one second holds are: upper hold =
 ADVANCE, lower hold = REJECT. Try it for a day before deciding; a one second
 hold per card is slow, and tap zones may win. Never bind double click (not
 supported) or five second holds (power menu).
 
-**Tap zones** are the whole upper field and the whole band. They need no
-eyes: the field is the top two thirds of the glass, the band is the bottom
-third. No small targets exist anywhere.
+**Tap zones** are the whole primary field and the whole band, split at
+y 311. They need no eyes: the field is the top two thirds of the glass, the
+band is the bottom third. No small targets exist anywhere.
 
 **Feedback**, always without words:
 
@@ -237,21 +322,22 @@ confirmation dialogs anywhere.
 
 ## 8. Screens (Mneme under this guide)
 
-**Choose.** Primary box: deck name at the largest step that fits. Band: due
-count as a bare number at S1, or empty when nothing is due. Ring: fraction
-of today's cards already done across all decks. ADVANCE opens. REJECT steps
-to the next deck. Swipe left syncs; the ring spins while it runs.
+**Choose.** Primary field: deck name, fitted. Band: due count as a bare
+number, fitted (a two-digit count lands near 117 px), or empty when nothing
+is due. Ring: fraction of today's cards already done across all decks.
+ADVANCE opens. REJECT steps to the next deck. Swipe left syncs; the ring
+spins while it runs.
 
-**Recall, latent.** Primary box: the prompt. Band at alpha 90, empty. Ring:
-session progress. Nothing else.
+**Recall, latent.** Primary field: the prompt, fitted. Band at alpha 90,
+empty. Ring: session progress. Nothing else.
 
-**Recall, resolved.** Primary shrinks one step only if it had three lines.
-Band at alpha 200 with the answer at S1 or S2. MORE swaps the note in.
-ADVANCE accepts, REJECT rejects, PROMOTE and DEMOTE refine.
+**Recall, resolved.** Primary unchanged. Band at alpha 200 with the answer,
+fitted. MORE swaps the note in, refitted. ADVANCE accepts, REJECT rejects,
+PROMOTE and DEMOTE refine.
 
-**Done.** Primary box: cards reviewed, bare number. Band: cards to relearn,
-bare number, or empty. Ring full. ADVANCE learns ten more new cards if any
-remain; LEAVE goes back.
+**Done.** Primary field: cards reviewed, bare number, fitted. Band: cards to
+relearn, bare number, or empty. Ring full. ADVANCE learns ten more new
+cards if any remain; LEAVE goes back.
 
 The current Mneme pages violate this guide on purpose: they were built to
 prove function first. Section 11 lists the changes.
@@ -262,8 +348,10 @@ prove function first. Section 11 lists the changes.
 - No more than two pieces of information on screen. The note replaces the
   answer; it never joins it.
 - No on-screen buttons where a button, a swipe or a zone exists.
+- No fixed type sizes. Every piece of content is fitted to its field.
 - No scrolling text (`text_style.NONE` is a marquee). Wrap or shrink.
 - No text under 32 px. No Light weight. No condensed face.
+- No moving anchors: a field's box never changes, only its text size.
 - No animation over 250 ms. No motion that has to finish before input works.
 - No colour as sole carrier of meaning.
 - No greys with channels 1 to 46. No white backgrounds.
@@ -271,7 +359,7 @@ prove function first. Section 11 lists the changes.
 
 ## 10. Verify on the watch
 
-The design rests on two facts only the hardware can confirm.
+The design rests on three facts only the hardware can confirm.
 
 1. **Buttons.** Open Mneme, tap `input probe` at the bottom of the deck
    list. Press the upper button, the lower button, hold each for a second,
@@ -280,40 +368,52 @@ The design rests on two facts only the hardware can confirm.
    to the app list, that tap is not interceptable and Tier 1 for that verb
    falls back to Tier 3. Report the lines back and the bindings get fixed.
 2. **Legibility.** Hold the visual companion page open on your phone at
-   wrist distance, glasses off, and read the type specimen in its physical
-   scale mode. The smallest row you read without effort is your floor. If
-   it is above 32 px, the scale shifts up one step across the board and the
-   28 character content rule tightens to match.
+   wrist distance, glasses off, and read the ladder in its physical scale
+   mode. The smallest row you read without effort is your floor. If it is
+   above 32 px, the floor in the fit rule rises to match and the content
+   ceiling tightens.
+3. **Bleed.** Widgets placed at negative coordinates and wider than the
+   screen [Likely] draw clipped, which is what the fields need. If the
+   firmware refuses them, the fields shrink to 0, 0, 466 and the bleed
+   applies only through the chord rule, which loses at most the 20 px at
+   the single widest row.
 
 ## 11. Implementation notes for Zepp OS
 
-- TEXT: `font: 'fonts/NotoSansGreek-Regular.ttf'`, `text_style.WRAP`,
-  `line_space`, `align.CENTER_H` and `CENTER_V`; resize with
-  `setProperty(prop.MORE, { y, h, text_size, text })` [Certain, TEXT doc].
-- Band: `FILL_RECT` with `alpha` (API_LEVEL 3.0 and up), full width, `y`
-  300, `h` 166 [Certain, FILL_RECT doc]. The round mask clips it.
-- Ring: `ARC` at `x 6, y 6, w 454, h 454`, `line_width 4`, `start_angle
-  -90`; 0 degrees is three o'clock [Certain, ARC doc].
+- Fields: one `TEXT` per field, box equal to the field (`x −20, y −20, w 506,
+  h 341` and `x −20, y 301, w 506, h 185`), `align.CENTER_H` and
+  `CENTER_V`, `text_style.WRAP`, `font: 'fonts/NotoSansGreek-Regular.ttf'`.
+  Change only `text_size`, `line_space` and `text` through
+  `setProperty(prop.MORE, {...})` [Certain, TEXT doc].
+- Fit: binary search over `getTextLayout` as in section 4, then apply. Cache
+  the result per card and face; a deck of 500 cards costs nothing to refit
+  lazily.
+- Band: `FILL_RECT` with `alpha` (API_LEVEL 3.0 and up), `x −20, y 301,
+  w 506, h 185` [Certain, FILL_RECT doc]. The round mask clips it.
+- Ring: `ARC` at `x 2, y 2, w 462, h 462`, `line_width 3`, `start_angle -90`;
+  0 degrees is three o'clock [Certain, ARC doc]. Create it first.
 - Inputs: one `onKey` and one `onGesture` registration per page, made in
   `build`, removed with `offKey()` and `offGesture()` in `onDestroy`.
   Return `true` to skip the system default [Certain, API docs].
 - Haptics: `new Vibrator()` then `start({ mode: VIBRATOR_SCENE_SHORT_LIGHT })`
   [Certain, Vibrator doc].
 - Screen: `setPageBrightTime`, `pauseDropWristScreenOff`, `setScrollLock`.
-- Tap zones: two full-size `BUTTON` widgets in ground colour with empty
-  text, created before the text widgets so text draws above them.
+- Tap zones: two `BUTTON` widgets in ground colour with empty text covering
+  the primary field and the band, created before the text widgets so text
+  draws above them.
 
 Changes to Mneme that this guide asks for, in order: strip labels from the
 deck list and review page; replace the four grade buttons and "Show answer"
-with zones, swipes and (after the probe) buttons; add the band and ring; add
-haptics; move the note behind MORE; add the calibration scale setting; trim
-starter deck backs to 28 characters.
+with zones, swipes and (after the probe) buttons; add the band, the fit
+routine and the ring; add haptics; move the note behind MORE; add the
+calibration floor setting; trim starter deck backs to 20 characters where
+possible and 32 at most.
 
 ## 12. Sources
 
 - Zepp OS device list, physical keys, physical buttons design, onKey,
-  onGesture, TEXT, FILL_RECT, ARC, Vibrator, font and colour pages, read
-  from the `zepp-health/zeppos-docs` repository on 2026-09-26.
+  onGesture, getTextLayout, TEXT, FILL_RECT, ARC, Vibrator, font and colour
+  pages, read from the `zepp-health/zeppos-docs` repository on 2026-09-26.
 - M. Zych, F. Costa, I. Pikovski, Č. Brukner, "Quantum interferometric
   visibility as a witness of general relativistic proper time", Nature
   Communications 2, 505 (2011).
