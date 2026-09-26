@@ -17,7 +17,7 @@ const SYNC_LABEL = 'Sync with phone'
 
 Page(
   BasePage({
-    state: { subtitle: null, rows: [], syncBtn: null, busy: false },
+    state: { subtitle: null, rows: [], syncBtn: null, probeBtn: null, busy: false },
 
     build() {
       createWidget(widget.TEXT, {
@@ -57,6 +57,10 @@ Page(
       if (this.state.syncBtn) {
         deleteWidget(this.state.syncBtn)
         this.state.syncBtn = null
+      }
+      if (this.state.probeBtn) {
+        deleteWidget(this.state.probeBtn)
+        this.state.probeBtn = null
       }
     },
 
@@ -111,6 +115,21 @@ Page(
         text_size: s(22),
         color: COLORS.soft,
         click_func: () => this.sync()
+      })
+
+      // Developer aid for the design guide: which buttons and swipes reach us.
+      this.state.probeBtn = createWidget(widget.BUTTON, {
+        x: s(153),
+        y: y + s(72),
+        w: W - s(306),
+        h: s(44),
+        radius: s(22),
+        normal_color: COLORS.bg,
+        press_color: COLORS.button,
+        text: 'input probe',
+        text_size: s(18),
+        color: COLORS.muted,
+        click_func: () => push({ url: 'page/probe' })
       })
     },
 

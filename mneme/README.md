@@ -8,6 +8,12 @@ dates, quotes, anything you would put in Anki.
 Reviews run entirely on the watch. The phone is only needed to install the
 app and to load new decks.
 
+`DESIGN.md` is the design guide the next version follows: two layers, no
+labels, buttons first, sized for reading without glasses. The deck list has
+an `input probe` entry that shows which side-button and swipe events reach
+the app on your watch; it exists to settle the guide's open question and
+goes away once the answer is in.
+
 ## What you get
 
 - **Deck list** with today's due count per deck and a Sync button.

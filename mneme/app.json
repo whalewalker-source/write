@@ -25,7 +25,7 @@
     "active2r": {
       "module": {
         "page": {
-          "pages": ["page/home", "page/review"]
+          "pages": ["page/home", "page/review", "page/probe"]
         },
         "app-side": {
           "path": "app-side/index"
